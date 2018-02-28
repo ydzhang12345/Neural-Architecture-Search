@@ -158,7 +158,8 @@ class NetworkManager:
                     if acc > best_accuracy:
                         best_accuracy = acc
                     else:
-                        K.set_value(adam.lr, 0.5 * K.get_value(adam.lr))
+                        new_lr = max(0.5 * K.get_value(adam.lr), 1e-4)
+                        K.set_value(adam.lr, new_lr)
 
                 '''
                 is_last_step = (training_step == training_steps_max)

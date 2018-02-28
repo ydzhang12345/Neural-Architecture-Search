@@ -47,9 +47,9 @@ def main(_):
     state_space = StateSpace()
 
     # add states
-    state_space.add_state(name='kernel', values=[3])
-    state_space.add_state(name='filters', values=[64])
-    state_space.add_state(name='stride', values=[1])
+    #state_space.add_state(name='kernel', values=[3])
+    state_space.add_state(name='filters', values=[30, 60, 100, 144])
+    #state_space.add_state(name='stride', values=[1])
 
     # print the state space being searched
     state_space.print_state_space()
@@ -202,17 +202,17 @@ if __name__ == '__main__':
   parser.add_argument(
       '--how_many_training_steps',
       type=str,
-      default='15000,3000',
+      default='1000',
       help='How many training loops to run',)
   parser.add_argument(
       '--eval_step_interval',
       type=int,
-      default=400,
+      default=200,
       help='How often to evaluate the training results.')
   parser.add_argument(
       '--learning_rate',
       type=str,
-      default='0.001,0.0001',
+      default='0.001',
       help='How large a learning rate to use when training.')
   parser.add_argument(
       '--batch_size',
@@ -227,7 +227,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--wanted_words',
       type=str,
-      default='yes,no,up,down,left,right,on,off,stop,go',
+      default='yes,no', #default='yes,no,up,down,left,right,on,off,stop,go'
       help='Words to use (others will be added to an unknown label)',)
   parser.add_argument(
       '--train_dir',

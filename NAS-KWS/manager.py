@@ -2,10 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
-from keras.models import Model
-from keras import backend as K
-from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.optimizers import Adam
 import tensorflow as tf
 import pdb
 from six.moves import xrange  # pylint: disable=redefined-builtin
@@ -49,8 +45,6 @@ def KWS_data_loader(FLAGS, sess):
                                      0.0, 0, 'validation', sess))
     input_frequency_size = model_settings['dct_coefficient_count']
     input_time_size = model_settings['spectrogram_length']
-    validation_fingerprints = validation_fingerprints.reshape(-1, input_time_size, input_frequency_size, 1)
-    
     return audio_processor, training_steps_list, learning_rates_list, model_settings, time_shift_samples, validation_fingerprints, validation_ground_truth
 
 class NetworkManager:
@@ -76,6 +70,7 @@ class NetworkManager:
         self.beta = acc_beta
         self.beta_bias = acc_beta
         self.moving_acc = 0.0
+
 
     def get_rewards(self, model_fn, actions):
         '''
@@ -103,81 +98,77 @@ class NetworkManager:
         Returns:
             a reward for training a model with the given actions
         '''
-        with tf.Session(graph=tf.Graph()) as network_sess:
-            K.set_session(network_sess)
 
+        with tf.Session(graph=tf.Graph()) as network_sess:
+            tf.logging.set_verbosity(tf.logging.INFO)
             audio_processor, training_steps_list, learning_rates_list, model_settings, time_shift_samples, X_val, y_val = KWS_data_loader(
                 self.FLAGS, network_sess)
 
-
             # generate a submodel given predicted actions
-            model = model_fn(actions)  # type: Model
-            adam = Adam(lr=0.001)
-            model.compile(adam, 'categorical_crossentropy', metrics=['accuracy'])
+            logits, fingerprint_input, is_training = model_fn(actions, model_settings)
+            ground_truth_input = tf.placeholder(tf.float32, [None, model_settings['label_count']], name='groundtruth_input')
+            learning_rate = 0.001
+
+            # Optionally we can add runtime checks to spot when NaNs or other symptoms of
+            # numerical errors start occurring during training.
+            control_dependencies = []
+            if self.FLAGS.check_nans:
+                checks = tf.add_check_numerics_ops()
+                control_dependencies = [checks]
+
+            # Create the back propagation and training evaluation machinery in the graph.
+            with tf.name_scope('cross_entropy'):
+                cross_entropy_mean = tf.reduce_mean(
+                    tf.nn.softmax_cross_entropy_with_logits(
+                        labels=ground_truth_input, logits=logits))
+
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.name_scope('train'), tf.control_dependencies(update_ops), tf.control_dependencies(control_dependencies):
+                learning_rate_input = tf.placeholder(tf.float32, [], name='learning_rate_input')
+                train_op = tf.train.AdamOptimizer(learning_rate_input)
+                train_step = slim.learning.create_train_op(cross_entropy_mean, train_op)
+            predicted_indices = tf.argmax(logits, 1)
+            expected_indices = tf.argmax(ground_truth_input, 1)
+            correct_prediction = tf.equal(predicted_indices, expected_indices)
+            evaluation_step = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 
-            # unpack the dataset
             # Training loop.
             best_accuracy = 0
             training_steps_max = np.sum(training_steps_list)
             start_step = 1 # use for checkpoint, fixed here
-            steps = audio_processor.set_size('training') // self.FLAGS.batch_size
-
-
-            
-            #for training_step in xrange(start_step, training_steps_max + 1):
-            for epochs in range(66):
-                # Training loop.
-                #training_steps_sum = 0
-                #for i in range(len(training_steps_list)):
-                #  training_steps_sum += training_steps_list[i]
-                #  if training_step <= training_steps_sum:
-                #    learning_rate_value = learning_rates_list[i]
-                #    break
-                #K.set_value(adam.lr, 0.5 * K.get_value(adam.lr))
-                # Pull the audio samples we'll use for training.
-                train_fingerprints, y_train = audio_processor.get_data(
-                    -1, 0, model_settings, self.FLAGS.background_frequency,
+            tf.global_variables_initializer().run()
+          
+            for training_step in xrange(start_step, training_steps_max + 1):
+                X_train, y_train = audio_processor.get_data(
+                    self.FLAGS.batch_size, 0, model_settings, self.FLAGS.background_frequency,
                     self.FLAGS.background_volume, time_shift_samples, 'training', network_sess)
-                X_train = train_fingerprints.reshape(
-                    -1, model_settings['spectrogram_length'], model_settings['dct_coefficient_count'], 1)
+                train_accuracy, _ = network_sess.run(
+                    [
+                        evaluation_step , train_step
+                    ],
+                    feed_dict={
+                        fingerprint_input: X_train,
+                        ground_truth_input: y_train,
+                        learning_rate_input: learning_rate,
+                        is_training: True
+                    })
+                tf.logging.info('Step #%d: accuracy %.2f%%' % (training_step, train_accuracy * 100))
 
-                # train the model using Keras methods
-                for step in range(steps + 1):
-                    start = step*self.FLAGS.batch_size
-                    if (step == steps):
-                        end = -1  
-                    else:
-                        end = (step+1)*self.FLAGS.batch_size
-                    batch_loss, batch_acc = model.train_on_batch(X_train[start:end], y_train[start:end])
-                    print ('training_steps:', step, 'batch_acc:', batch_acc)
-
-                if (epochs % 2 == 0):
-                    loss, acc = model.evaluate(X_val, y_val, batch_size=self.FLAGS.batch_size)
-                    print ('epochs', epochs, 'validation_acc:', acc)
-                    if acc > best_accuracy:
-                        best_accuracy = acc
-                    else:
-                        new_lr = max(0.5 * K.get_value(adam.lr), 1e-4)
-                        K.set_value(adam.lr, new_lr)
-
-                '''
                 is_last_step = (training_step == training_steps_max)
                 if (training_step % self.FLAGS.eval_step_interval) == 0 or is_last_step:
-                    loss, acc = model.evaluate(X_val, y_val, batch_size=self.FLAGS.batch_size)
-                    print ('validation_acc:', acc)
-                    if acc > best_accuracy:
-                        best_accuracy = acc
+                    validation_accuracy = network_sess.run(
+                        evaluation_step,
+                        feed_dict={
+                            fingerprint_input: X_val,
+                            ground_truth_input: y_val,
+                            is_training: False
+                        })
+                    tf.logging.info('Step #%d: Validation accuracy %.2f%%' % (training_step, validation_accuracy * 100))
+                    if validation_accuracy > best_accuracy:
+                        best_accuracy = validation_accuracy
                     else:
-                        K.set_value(adam.lr, 0.5 * K.get_value(adam.lr))
-                '''
-            
-
-            # load best performance epoch in this training session
-            # model.load_weights('weights/temp_network.h5')
-
-            # evaluate the model
-            # loss, acc = model.evaluate(X_val, y_val, batch_size=self.batchsize)
+                        learning_rate = learning_rate / 2.0
 
             # compute the reward
             reward = (best_accuracy - self.moving_acc)

@@ -171,7 +171,8 @@ class NetworkManager:
                         learning_rate = learning_rate / 2.0
 
             # compute the reward
-            reward = (best_accuracy - self.moving_acc)
+            acc = best_accuracy
+            reward = (acc - self.moving_acc)
 
             # if rewards are clipped, clip them in the range -0.05 to 0.05
             if self.clip_rewards:

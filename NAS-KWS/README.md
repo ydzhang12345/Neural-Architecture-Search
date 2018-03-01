@@ -32,7 +32,7 @@ Implementation details were found from:
 - http://rll.berkeley.edu/deeprlcoursesp17/docs/quoc_barret.pdf
 
 # Result
-I tried a toy CNN model with 4 CNN layers with different filter sizes (16, 32, 64) and kernel sizes (1, 3) to maximise score in 10 epochs of training on CIFAR-10.
+Currently for 3-layer MLP, the best learnt network is 144-144-144 (95.5%), which makes sense. Another good candidate is 144-100-60 (95.3%)
 
 
 # Acknowledgements

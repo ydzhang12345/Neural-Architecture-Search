@@ -4,7 +4,6 @@ from collections import OrderedDict
 
 from keras import backend as K
 import tensorflow as tf
-import pdb
 
 import os
 if not os.path.exists('weights/'):
@@ -117,10 +116,15 @@ class StateSpace:
         for id in range(self.size * num_layers):
             state = self[id]
             size = state['size']
+            #pdb.set_trace()
 
-            sample = np.random.choice(size, size=1)
-            sample = state['index_map_'][sample[0]]
-            state = self.one_hot_encode(id, sample)
+            #sample = np.random.choice(size, size=1)
+            #sample = state['index_map_'][sample[0]]
+            #state = self.one_hot_encode(id, sample)
+            #pdb.set_trace()
+            state = 1.0 / size * np.ones(size)#np.random.uniform(0, 1, size)
+            #state /= np.sum(state)
+            #pdb.set_trace()
             states.append(state)
         return states
 
@@ -202,6 +206,7 @@ class Controller:
         self.policy_classifiers = []
         self.policy_actions = []
         self.policy_labels = []
+        self.cell_state = None
 
         self.build_policy_network()
 
@@ -224,11 +229,15 @@ class Controller:
             for i in range(self.state_size * self.num_layers):
                 state_ = self.state_space[i]
                 size = state_['size']
+                action = np.random.uniform(0, 1, size).reshape([1, 4])
+                action /= np.sum(action)
 
-                sample = np.random.choice(size, size=1)
-                sample = state_['index_map_'][sample[0]]
-                action = self.state_space.one_hot_encode(i, sample)
+                #sample = np.random.choice(size, size=1)
+                #sample = state_['index_map_'][sample[0]]
+                #action = self.state_space.one_hot_encode(i, sample)
+
                 actions.append(action)
+            #pdb.set_trace()
             return actions
 
         else:
@@ -236,15 +245,15 @@ class Controller:
             initial_state = self.state_space[0]
             size = initial_state['size']
 
-            if state[0].shape != (1, size, 1):
-                state = state[0].reshape((1, size, 1))
+            if state[0].shape != (1, 1, size):
+                state = state[0].reshape((1, 1, size))
             else:
                 state = state[0]
 
             print("State input to Controller for Action : ", state.flatten())
 
             with self.policy_session.as_default():
-                K.set_session(self.policy_session)
+                #K.set_session(self.policy_session)
 
                 with tf.name_scope('action_prediction'):
                     pred_actions = self.policy_session.run(self.policy_actions, feed_dict={self.state_input: state})
@@ -254,7 +263,7 @@ class Controller:
 
     def build_policy_network(self):
         with self.policy_session.as_default():
-            K.set_session(self.policy_session)
+            #K.set_session(self.policy_session)
 
             with tf.name_scope('controller'):
                 with tf.variable_scope('policy_network'):
@@ -262,15 +271,24 @@ class Controller:
                     # state input is the first input fed into the controller RNN.
                     # the rest of the inputs are fed to the RNN internally
                     with tf.name_scope('state_input'):
-                        state_input = tf.placeholder(dtype=tf.float32, shape=(1, None, 1), name='state_input')
+                        state_input = 1/self.state_space[0]['size'] * tf.ones(self.state_space[0]['size'])
+                        state_input = tf.expand_dims(state_input, 0)
+                        state_input = tf.expand_dims(state_input, 0, name='state_input')
+                        #state_input = tf.placeholder(dtype=tf.float32, shape=(1, 1, self.state_space[0]['size']), name='state_input')
                     self.state_input = state_input
 
                     # we can use LSTM as the controller as well
                     nas_cell = tf.contrib.rnn.NASCell(self.controller_cells)
-                    cell_state = nas_cell.zero_state(batch_size=1, dtype=tf.float32)
+                    if self.cell_state == None:
+                        self.cell_state = nas_cell.zero_state(batch_size=1, dtype=tf.float32)
+                    
+
+                    #with tf.name_scope('cell_state'):
+                    #    input_cell_state = tf.placeholder(dtype=tf.float32, shape=(1, self.controller_cells), name='cell_state')
 
                     # initially, cell input will be 1st state input
                     cell_input = state_input
+                    #cell_input = 
 
                     # we provide a flat list of chained input-output to the RNN
                     for i in range(self.state_size * self.num_layers):
@@ -281,17 +299,17 @@ class Controller:
                             # feed the ith layer input (i-1 layer output) to the RNN
                             outputs, final_state = tf.nn.dynamic_rnn(nas_cell,
                                                                      cell_input,
-                                                                     initial_state=cell_state,
+                                                                     initial_state=self.cell_state,
                                                                      dtype=tf.float32)
 
                             # add a new classifier for each layers output
-                            classifier = tf.layers.dense(outputs[:, -1, :], units=size, name='classifier_%d' % (i),
-                                                         reuse=False)
+                            classifier = tf.layers.dense(outputs[:, -1, :], units=size, name='classifier_%d' % (i))
+                                                         #reuse=False)
                             preds = tf.nn.softmax(classifier)
 
                             # feed the previous layer (i-1 layer output) to the next layers input, along with state
-                            cell_input = tf.expand_dims(classifier, -1, name='cell_output_%d' % (i))
-                            cell_state = final_state
+                            cell_input = tf.expand_dims(preds, 0, name='cell_output_%d' % (i))
+                            self.cell_state = final_state
 
                         # store the tensors for later loss computation
                         self.cell_outputs.append(cell_input)
@@ -372,7 +390,6 @@ class Controller:
                 for i in range(20):
                     state_ = self.state_buffer[i]
                     state_list = self.state_space.parse_state_space_list(state_)
-                    pdb.set_trace()
                     state_list = str(state_list)#','.join(state_list)
 
                     f.write("%0.4f,%s\n" % (self.reward_buffer[i], state_list))
@@ -418,7 +435,7 @@ class Controller:
 
         # the initial input to the controller RNN
         state_input_size = self.state_space[0]['size']
-        state_input = states[0].reshape((1, state_input_size, 1))
+        state_input = states[0].reshape((1, 1, state_input_size))
         print("State input to Controller for training : ", state_input.flatten())
 
         # the discounted reward value
@@ -436,7 +453,7 @@ class Controller:
             feed_dict[self.policy_labels[i]] = label
 
         with self.policy_session.as_default():
-            K.set_session(self.policy_session)
+            #K.set_session(self.policy_session)
 
             print("Training RNN (States ip) : ", state_list)
             print("Training RNN (Reward ip) : ", reward.flatten())

@@ -13,7 +13,6 @@ from controller import Controller, StateSpace
 from manager import NetworkManager
 from model import model_fn
 
-import pdb
 import argparse
 import os.path
 import sys
@@ -37,7 +36,7 @@ def main(_):
 
     MAX_EPOCHS = 60  # maximum number of epochs to train
     BATCHSIZE = 100  # batchsize
-    EXPLORATION = 0.8  # high exploration for the first 1000 steps
+    EXPLORATION = 0.5  # high exploration for the first 1000 steps
     REGULARIZATION = 1e-3  # regularization strength
     CONTROLLER_CELLS = 32  # number of cells in RNN controller
     CLIP_REWARDS = False  # clip rewards in the [-0.05, 0.05] range
@@ -71,13 +70,12 @@ def main(_):
     # get an initial random state space if controller needs to predict an
     # action from the initial state
     state = state_space.get_random_state_space(NUM_LAYERS)
-    print("Initial Random State : ", state_space.parse_state_space_list(state))
-    print()
+    #print("Initial Random State : ", state_space.parse_state_space_list(state))
+    #print()
 
     # train for number of trails
     for trial in range(MAX_TRIALS):
         with policy_sess.as_default():
-            K.set_session(policy_sess)
             actions = controller.get_action(state)  # get an action for the previous state
 
         # print the action probabilities
@@ -89,7 +87,6 @@ def main(_):
         print("Rewards : ", reward, "Accuracy : ", previous_acc)
 
         with policy_sess.as_default():
-            K.set_session(policy_sess)
 
             total_reward += reward
             print("Total reward : ", total_reward)
@@ -202,7 +199,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--how_many_training_steps',
       type=str,
-      default='100',
+      default='200',
       help='How many training loops to run',)
   parser.add_argument(
       '--eval_step_interval',
@@ -227,7 +224,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--wanted_words',
       type=str,
-      default='yes,no', #default='yes,no,up,down,left,right,on,off,stop,go'
+      default='yes', #default='yes,no,up,down,left,right,on,off,stop,go'
       help='Words to use (others will be added to an unknown label)',)
   parser.add_argument(
       '--train_dir',

@@ -3,9 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import tensorflow as tf
-import pdb
 from six.moves import xrange  # pylint: disable=redefined-builtin
-import pdb
 import argparse
 import os.path
 import sys
@@ -172,7 +170,9 @@ class NetworkManager:
 
             # compute the reward
             acc = best_accuracy
-            reward = (acc - self.moving_acc)
+            reward = (acc - self.moving_acc) * 10
+            if self.moving_acc == 0.0:
+                reward = 0
 
             # if rewards are clipped, clip them in the range -0.05 to 0.05
             if self.clip_rewards:
@@ -182,6 +182,8 @@ class NetworkManager:
             self.moving_acc = self.beta * self.moving_acc + (1 - self.beta) * acc
             self.moving_acc = self.moving_acc / (1 - self.beta_bias)
             self.beta_bias = 0
+
+
 
             print()
             print("Manager: EWA Accuracy = ", self.moving_acc)

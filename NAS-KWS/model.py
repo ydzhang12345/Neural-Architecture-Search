@@ -7,7 +7,6 @@ import sys
 import os
 import math
 
-import pdb
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from tensorflow.python.ops import control_flow_ops

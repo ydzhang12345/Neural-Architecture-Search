@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 from keras import backend as K
 import tensorflow as tf
+import pdb
 
 import os
 if not os.path.exists('weights/'):
@@ -281,6 +282,7 @@ class Controller:
                     nas_cell = tf.contrib.rnn.NASCell(self.controller_cells)
                     if self.cell_state == None:
                         self.cell_state = nas_cell.zero_state(batch_size=1, dtype=tf.float32)
+                    pdb.set_trace()
                     
 
                     #with tf.name_scope('cell_state'):

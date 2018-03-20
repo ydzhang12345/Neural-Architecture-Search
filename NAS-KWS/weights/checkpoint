@@ -1,2 +1,0 @@
-model_checkpoint_path: "controller.ckpt-250"
-all_model_checkpoint_paths: "controller.ckpt-250"

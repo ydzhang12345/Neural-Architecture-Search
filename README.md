@@ -11,4 +11,5 @@ To run the code, simply go to the toy-model folder and run
 
 python pg.py
 
-Instructions on how to run the google speech commands dataset will be updated soon. Please take a look on our report.
+Instructions on how to run the google speech commands dataset will be updated soon. Please take a look on our report:
+cs234-final-report.pdf in this repo for more details.
